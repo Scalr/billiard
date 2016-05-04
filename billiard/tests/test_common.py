@@ -4,12 +4,18 @@ import os
 import signal
 
 from contextlib import contextmanager
-from time import time
+from time import time, sleep
 
 from billiard.common import (
     _shutdown_cleanup,
     reset_signals,
     restart_state,
+)
+
+from billiard.pool import (
+    Pool,
+    SoftTimeLimitExceeded,
+    TimeLimitExceeded,
 )
 
 from .case import Case, Mock, call, patch, skip
@@ -96,3 +102,51 @@ class test_restart_state(Case):
         s.R, s.T = 100, time()
         s.step(time() + 20)
         self.assertEqual(s.R, 1)
+
+
+def timeouted_func(wait):
+    sleep(wait)
+
+
+def hold_exception_func(wait):
+    try:
+        sleep(wait)
+    except SoftTimeLimitExceeded:
+        sleep(wait)
+
+
+class test_time_limits(Case):
+    SOFT_TIMEOUT = 0.51
+    TIMEOUT = 1.51
+
+    def test_soft_timeout(self):
+        p = Pool(1, soft_timeout=self.SOFT_TIMEOUT)
+        start = time()
+        self.assertRaises(SoftTimeLimitExceeded,
+                          p.apply,
+                          timeouted_func,
+                          (self.SOFT_TIMEOUT + 1,))
+        self.assertAlmostEqual(time()-start, round(self.SOFT_TIMEOUT), 1)
+
+    def test_async_soft_timeout(self):
+        p = Pool(1, soft_timeout=self.SOFT_TIMEOUT)
+        start = time()
+        res = p.apply_async(timeouted_func, (self.TIMEOUT + 1,))
+        self.assertRaises(SoftTimeLimitExceeded, res.get)
+        self.assertAlmostEqual(time()-start, round(self.SOFT_TIMEOUT), 1)
+
+    def test_hard_timeout(self):
+        p = Pool(1, soft_timeout=self.SOFT_TIMEOUT, timeout=self.TIMEOUT)
+        start = time()
+        self.assertRaises(TimeLimitExceeded,
+                          p.apply,
+                          hold_exception_func,
+                          (self.TIMEOUT + 1,))
+        self.assertAlmostEqual(time()-start, round(self.TIMEOUT), 1)
+
+    def test_async_hard_timeout(self):
+        p = Pool(1, soft_timeout=self.SOFT_TIMEOUT, timeout=self.TIMEOUT)
+        start = time()
+        res = p.apply_async(hold_exception_func, (self.TIMEOUT + 1,))
+        self.assertRaises(TimeLimitExceeded, res.get)
+        self.assertAlmostEqual(time()-start, round(self.TIMEOUT), 1)
