@@ -63,9 +63,13 @@ if platform.system() == 'Windows':  # pragma: no cover
     # *and its children* (if any).
     from ._win import kill_processtree as _kill  # noqa
     SIGKILL = TERM_SIGNAL
+    # Signal used for soft time limits.
+    SIG_SOFT_TIMEOUT = getattr(signal, "CTRL_BREAK_EVENT", None)
 else:
     from os import kill as _kill                 # noqa
     SIGKILL = signal.SIGKILL
+    # Signal used for soft time limits.
+    SIG_SOFT_TIMEOUT = getattr(signal, "SIGUSR1", None)
 
 
 try:
@@ -104,10 +108,6 @@ DEATH = 4
 EX_OK = 0
 EX_FAILURE = 1
 EX_RECYCLE = 0x9B
-
-
-# Signal used for soft time limits.
-SIG_SOFT_TIMEOUT = getattr(signal, "SIGUSR1", None)
 
 #
 # Miscellaneous
